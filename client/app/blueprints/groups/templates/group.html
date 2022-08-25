@@ -3,26 +3,28 @@
 {% block content %}
 <div class="card bg-white mt-4 w-75 position-absolute translate-middle-x start-50">
     <div class="card-body">
-        <h1 class="card-title">Group {{group_id}}</h1>
+        <h1 class="card-title">Group: {{group_id}}</h1>
         <hr>
-        <table class="table table-striped">
+        <table class="table table-striped table-hover">
             <thead>
                 <tr>
-                    <th>Sample Id</th>
-                    <th>Other column</th>
+                    {% for column in table_definition %}
+                        <th>{{ column.label }}</th>
+                    {% endfor %}
                 </tr>
             </thead>
             <tbody class="table-hover">
                 {% for sample in samples %}
                 <tr>
-                    <th><a href="{{ url_for('samples.sample', sample_id=sample.sampleId) }}">{{sample.sampleId}}</a></th>
-                    <th>-</th>
+                    {% for column in table_definition %}
+                        <th>
+                            {{ sample[column.name] }}
+                        </th>
+                    {% endfor %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
-{{ table_definition }}
 {% endblock content %}
-
