@@ -12,8 +12,9 @@
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="selectAllSamples"  name="selectAll"></th>
-                        <th>{{table_definition[0]['label']}}</th>
-                        <th>{{table_definition[1]['label']}}</th>
+                        {% for column in table_definition %}
+                        <th>{{ column.label }}</th>
+                        {% endfor %}
                     </tr>
                 </thead>
                 <tbody class="table-hover">
@@ -45,4 +46,3 @@
     });
 </script>
 {% endblock content %}
-
