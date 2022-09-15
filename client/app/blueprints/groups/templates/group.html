@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% import "cell_fmt.html" as cell_format %}
 
 {% block content %}
 <div class="card bg-white mt-4 w-75 position-absolute translate-middle-x start-50">
@@ -17,8 +18,9 @@
                 {% for sample in samples %}
                 <tr>
                     {% for column in table_definition %}
+                        {% set macro_name = 'render_' + column.type %}
                         <th>
-                            {{ sample[column.name] }}
+                            {{ cell_format[macro_name](sample | json_path(column.path)) }}
                         </th>
                     {% endfor %}
                 </tr>
