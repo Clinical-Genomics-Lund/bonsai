@@ -99,3 +99,4 @@ def cgmlst_cluster_samples(headers, **kwargs):
 
     resp.raise_for_status()
     return resp.json()
+
