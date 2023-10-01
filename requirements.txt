@@ -7,7 +7,7 @@ Flask-PyMongo==0.4.1
 Flask-Table==0.2.13
 Flask-WTF==0.13.1
 itsdangerous==0.24
-Jinja2==2.8.1
+Jinja2==2.11.3
 MarkupSafe==0.23
 pymongo==3.4.0
 python-dateutil==2.6.0
