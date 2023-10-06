@@ -17,11 +17,12 @@ from pymongo.errors import DuplicateKeyError
 from ..crud.sample import EntryNotFound, add_comment, add_location
 from ..crud.sample import hide_comment as hide_comment_for_sample
 from ..crud.sample import create_sample as create_sample_record
-from ..crud.sample import get_sample, get_samples_summary, add_genome_signature_file
+from ..crud.sample import get_sample, get_samples_summary, add_genome_signature_file, update_sample_qc_classification
 from ..crud.sample import update_sample as crud_update_sample
 from ..crud.user import get_current_active_user
 from ..db import db
 from ..models.location import LocationOutputDatabase
+from ..models.qc import QcClassification
 from ..models.sample import (
     SAMPLE_ID_PATTERN,
     Comment,
@@ -52,8 +53,9 @@ async def read_samples(
     limit: int = Query(10, gt=-1),
     skip: int = Query(0, gt=-1),
     offset: int = Query(0, gt=-1),
-    include_mlst: bool = True,
-    include_cgmlst: bool = True,
+    include_qc: bool = Query(True),
+    include_mlst: bool = Query(True),
+    #include_cgmlst: bool = Query(True),
     sid: List[str] | None = Query(None),
     current_user: UserOutputDatabase = Security(
         get_current_active_user, scopes=[READ_PERMISSION]
@@ -61,7 +63,7 @@ async def read_samples(
 ):
     # skip and offset function the same
     skip = max([offset, skip])
-    db_obj = await get_samples_summary(db, limit=limit, skip=skip, include=sid, include_mlst=include_mlst, include_cgmlst=include_cgmlst)
+    db_obj = await get_samples_summary(db, limit=limit, skip=skip, include=sid, include_qc=include_qc, include_mlst=include_mlst)
     return {"status": "success", "total": len(db_obj), "records": db_obj}
 
 
@@ -178,6 +180,34 @@ async def create_genome_signatures_sample(
         "id": sample_id,
         "signature_file": signature_path,
     }
+
+
+@router.put(
+    "/samples/{sample_id}/qc_status",
+    response_model=QcClassification,
+    tags=DEFAULT_TAGS,
+)
+async def update_qc_status(
+    classification: QcClassification,
+    sample_id: str = Path(
+        ...,
+        title="ID of the sample",
+        min_length=3,
+        max_length=100,
+        regex=SAMPLE_ID_PATTERN,
+    ),
+    current_user: UserOutputDatabase = Security(
+        get_current_active_user, scopes=[WRITE_PERMISSION]
+    ),
+):
+    try:
+        status_obj = await update_sample_qc_classification(db, sample_id, classification)
+    except EntryNotFound as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        )
+    return status_obj
 
 
 @router.post(
