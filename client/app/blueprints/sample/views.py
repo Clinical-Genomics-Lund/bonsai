@@ -13,13 +13,14 @@ from app.bonsai import (
     get_sample_by_id,
     get_group_by_id,
     post_comment_to_sample,
+    update_sample_qc_classification,
     remove_comment_from_sample,
     find_samples_similar_to_reference,
     TokenObject,
 )
 from flask_login import login_required, current_user
 from itertools import chain, groupby
-from app.models import ElementType, PredictionSoftware, NT_TO_AA
+from app.models import ElementType, PredictionSoftware, NT_TO_AA, BadSampleQualityAction
 
 samples_bp = Blueprint(
     "samples",
@@ -161,6 +162,8 @@ def sample(sample_id):
         for res_type, rows 
         in  groupby(amr_summary.values(), key=lambda x: x['res_class'])
     }
+    # get all actions if sample fail qc
+    bad_qc_actions = [member.value for member in BadSampleQualityAction]
 
     # Get the 10 most similar samples and calculate the pair-wise similaity
     similar_samples = find_samples_similar_to_reference(
@@ -177,7 +180,8 @@ def sample(sample_id):
 
     return render_template(
         "sample.html", sample=sample, amr_summary=amr_summary, resistance_info=resistance_info,
-        title=sample_id, is_filtered=bool(group_id), similar_samples=similar_samples
+        title=sample_id, is_filtered=bool(group_id), similar_samples=similar_samples,
+        bad_qc_actions=bad_qc_actions
     )
 
 
@@ -224,8 +228,35 @@ def hide_comment(sample_id, comment_id):
         resp = remove_comment_from_sample(
             token, sample_id=sample_id, comment_id=comment_id
         )
-    except:
-        flash(resp.text, "danger")
+    except Exception as error:
+        flash(str(error), "danger")
+    finally:
+        return redirect(url_for("samples.sample", sample_id=sample_id))
+
+
+@samples_bp.route("/samples/<sample_id>/qc_status", methods=["POST"])
+@login_required
+def update_qc_classification(sample_id):
+    """Update the quality control report of a sample."""
+    token = TokenObject(**current_user.get_id())
+
+    # build data to store in db
+    result = request.form.get('qc-validation', None)
+    if result == 'passed':
+        action = None
+        comment = ''
+    elif result == 'failed':
+        comment = request.form.get('qc-comment', '')
+        action = request.form.get('qc-action', '')
+    else:
+        raise ValueError(f'Unknown value of qc classification, {result}')
+
+    try:
+        update_sample_qc_classification(
+            token, sample_id=sample_id, status=result, action=action, comment=comment
+        )
+    except Exception as error:
+        flash(str(error), "danger")
     finally:
         return redirect(url_for("samples.sample", sample_id=sample_id))
 

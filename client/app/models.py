@@ -12,6 +12,22 @@ class RWModel(BaseModel):
         use_enum_values = True
 
 
+
+class SampleBasketObject(RWModel):
+    """Contaner for sample baskt content."""
+    sample_id: str
+    analysis_profile: str
+
+
+class BadSampleQualityAction(Enum):
+    """Actions that could be taken if a sample have low quality."""
+
+    # phenotype
+    REEXTRACTION = "new extraction"
+    RESEQUENCE = "resequence"
+    FAILED = "permanent fail"
+
+
 class PredictionSoftware(Enum):
     """Container for software names."""
 

@@ -218,7 +218,7 @@
 {% set footnotes = [] %}
 <div class="container-fluid">
     <div class="row">
-        {{ sidebar(sample) }}
+        {{ sidebar(sample, bad_qc_actions) }}
         <div class="col-md-9 ms-sm-auto col-lg-10 bg-white px-md-4 container" data-bs-spy="scroll" data-bs-target="#sidebar">
             <h1 id="sample-id-heading" class="pt-4">{{sample.sample_id}}</h1>
             <div class="row gx-5">
@@ -242,6 +242,9 @@
                                 {{tag.label}}
                             </a>
                         {% endfor %}
+                    </p>
+                    <p>
+                        QC: <strong>{{ sample.qc_status.status | capitalize }}</strong>{% if sample.qc_status.status == "failed" %}; {{ sample.qc_status.action }}, {{ sample.qc_status.comment }}{% endif %}
                     </p>
                 </div>
             </div>
@@ -342,8 +345,8 @@
     </div>
 </div>
 <script>
-    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
-    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    //const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    //const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
 
     function removeComment(btn) {
         // remove comment from sample
@@ -354,7 +357,7 @@
             btn.parentElement.remove()
         })
     }
-
+    // handle selection of similar samples
     const similarSamples = {{ similar_samples | tojson }}
     const tree = new TidyTree(similarSamples.newick, { 
         parent: "#tree-body",
@@ -370,5 +373,25 @@
     const sampleId = "{{sample.sample_id}}"
     tree.search(d => d.data.id.includes(sampleId)).selectAll("circle").style("fill", "steelblue").attr("r", 5);
     
+
+    // handle sample qc rejections
+    document.getElementById("passed-qc-btn").addEventListener("click", () => {
+        // enable selction of actions to take after rejecting a sample
+        const select = document.getElementById("failed-qc-action")
+        select.disabled = true
+        select.hidden = true
+        select.value = null
+        const textArea = document.getElementById("failed-qc-comment-container")
+        textArea.hidden = true
+        select.value = null
+    })
+    document.getElementById("failed-qc-btn").addEventListener("click", () => {
+        // enable selction of actions to take after rejecting a sample
+        const select = document.getElementById("failed-qc-action")
+        select.disabled = false
+        select.hidden = false
+        document.getElementById("failed-qc-comment-container").hidden = false
+    })
+
 </script>
 {% endblock content %}

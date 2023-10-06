@@ -18,6 +18,8 @@ from ..models.sample import (
     SampleInDatabase,
     PipelineResult,
 )
+from ..models.sample import SampleInDatabase
+from ..models.qc import QcClassification
 from ..models.typing import CGMLST_ALLELES
 from ..models.base import RWModel
 from .errors import EntryNotFound, UpdateDocumentError
@@ -25,6 +27,7 @@ from app import config
 import gzip
 import pathlib
 from ..utils import format_error_message
+from fastapi.encoders import jsonable_encoder
 
 LOG = logging.getLogger(__name__)
 CURRENT_SCHEMA_VERSION = 1
@@ -52,6 +55,61 @@ class TypingProfileAggregate(RWModel):
 TypingProfileOutput = list[TypingProfileAggregate]
 
 
+async def get_samples_summary(
+    db: Database,
+    limit: int = 0,
+    skip: int = 0,
+    include: List[str] | None = None,
+    include_qc: bool = True,
+    include_mlst: bool = True,
+    include_cgmlst: bool = True,
+    include_amr: bool = True,
+    include_virulence: bool = True,
+) -> List[SampleInDatabase]:
+    """Get a summay of several samples."""
+    # build query pipeline
+    pipeline = []
+    if include is not None:
+        pipeline.append({"$match": {"sample_id": {"$in": include}}})
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    if limit > 0:
+        pipeline.append({"$limit": limit})
+
+
+    pipeline.append({
+        "$addFields": {
+            "typing_result": {
+                "$filter": {
+                    "input": "$typing_result",
+                    "as": "res",
+                    "cond": {"$eq": ["$$res.type", "mlst"]}
+                }
+            }
+        }
+    })
+    base_projection = {"_id": 0, 
+                       "id": {"$convert": {"input": "$_id", "to": "string"}}, 
+                       "sample_id": 1, 
+                       "tags": 1, 
+                       "species_prediction": {"$arrayElemAt": ["$species_prediction", 0]},
+                       "created_at": 1, 
+                       "profile": "$run_metadata.run.analysis_profile",
+                       }
+    # define a optional projections
+    optional_projecton = {}
+    if include_qc:
+        optional_projecton["qc_status"] = 1
+    if include_mlst:
+        optional_projecton["mlst"] = {"$getField": {"field": "result", "input": {"$arrayElemAt": ["$typing_result", 0]}}}
+    # add projections to pipeline
+    pipeline.append({"$project": {**base_projection, **optional_projecton}})
+
+    # query database
+    cursor = db.sample_collection.aggregate(pipeline)
+    return await cursor.to_list(None)
+
+
 async def get_samples(
     db: Database,
     limit: int = 0,
@@ -77,7 +135,6 @@ async def get_samples(
         samp_objs.append(sample)
     return samp_objs
 
-
 async def create_sample(db: Database, sample: PipelineResult) -> SampleInDatabase:
     """Create a new sample document in database from structured input."""
     # validate data format
@@ -85,7 +142,7 @@ async def create_sample(db: Database, sample: PipelineResult) -> SampleInDatabas
         in_collections=[], **sample.dict()
     )
     # store data in database
-    doc = await db.sample_collection.insert_one(sample_db_fmt.dict())
+    doc = await db.sample_collection.insert_one(jsonable_encoder(sample_db_fmt))
     # print(sample_db_fmt.dict(by_alias=True))
 
     # create object representing the dataformat in database
@@ -143,8 +200,6 @@ async def add_comment(
 ) -> List[CommentInDatabase]:
     """Add comment to previously added sample."""
     fields = SampleInDatabase.__fields__
-    param_modified = fields["modified_at"].name
-    param_comment = fields["comments"].name
     # get existing comments for sample to get the next comment id
     sample = await get_sample(db, sample_id)
     comment_id = (
@@ -152,12 +207,12 @@ async def add_comment(
     )
     comment_obj = CommentInDatabase(id=comment_id, **comment.dict())
     update_obj = await db.sample_collection.update_one(
-        {fields["sample_id"].name: sample_id},
+        {"sample_id": sample_id},
         {
-            "$set": {param_modified: datetime.now()},
+            "$set": {"modified_at": datetime.now()},
             "$push": {
-                param_comment: {
-                    "$each": [comment_obj.dict()],
+                "comments": {
+                    "$each": [jsonable_encoder(comment_obj)],
                     "$position": 0,
                 }
             },
@@ -177,16 +232,13 @@ async def hide_comment(
 ) -> List[CommentInDatabase]:
     """Add comment to previously added sample."""
     fields = SampleInDatabase.__fields__
-    param_modified = fields["modified_at"].name
-    param_comment = fields["comments"].name
     # get existing comments for sample to get the next comment id
-    print([param_comment, sample_id, comment_id])
     update_obj = await db.sample_collection.update_one(
-        {fields["sample_id"].name: sample_id, f"{param_comment}.id": comment_id},
+        {"sample_id": sample_id, f"{param_comment}.id": comment_id},
         {
             "$set": {
-                param_modified: datetime.now(),
-                f"{param_comment}.$.displayed": False,
+                "modified_at": datetime.now(),
+                "comments.$.displayed": False,
             },
         },
     )
@@ -201,6 +253,26 @@ async def hide_comment(
         cmd.displayed = False if cmt.id == comment_id else cmt.displayed
         comments.append(cmt)
     return comments
+
+
+async def update_sample_qc_classification(db: Database, sample_id: str, classification: QcClassification) -> bool:
+    """Update the quality control classification of a sample"""
+
+    query = {"sample_id": sample_id}
+    update_obj = await db.sample_collection.update_one(query, {
+        "$set": {
+            "modified_at": datetime.now(),
+            "qc_status": jsonable_encoder(classification)
+        }
+    })
+    # verify successful update
+    # if sample is not fund
+    if not update_obj.matched_count == 1:
+        raise EntryNotFound(sample_id)
+    # if not modifed
+    if not update_obj.modified_count == 1:
+        raise UpdateDocumentError(sample_id)
+    return classification
 
 
 async def add_location(
@@ -218,14 +290,12 @@ async def add_location(
 
     # Add location to samples
     fields = SampleInDatabase.__fields__
-    param_modified = fields["modified_at"].name
-    param_location = fields["location"].name
     update_obj = await db.sample_collection.update_one(
-        {fields["sample_id"].name: sample_id},
+        {"sample_id": sample_id},
         {
             "$set": {
-                param_modified: datetime.now(),
-                param_location: ObjectId(location_id),
+                "modified_at": datetime.now(),
+                "location": ObjectId(location_id),
             }
         },
     )
