@@ -117,7 +117,7 @@ def cluster_on_minhash_signature(sample_ids: List[str], method: ClusterMethod):
     return newick_tree
 
   
-  def cluster_on_allele_profile_grapetree_mstrees(profiles: TypingProfileOutput) -> str:
+def cluster_on_allele_profile_grapetree_mstrees(profiles: TypingProfileOutput) -> str:
     """
     Cluster samples on their cgmlst profile using grapetree MStreesV2.
 
