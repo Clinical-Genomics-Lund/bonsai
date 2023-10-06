@@ -8,7 +8,7 @@ from ..crud.errors import EntryNotFound
 from ..models.user import UserOutputDatabase
 from ..models.base import RWModel
 from ..db import db
-from ..internal.cluster import cluster_on_allele_profile, ClusterMethod, DistanceMethod, cluster_on_minhash_signature
+from ..internal.cluster import cluster_on_allele_profile_grapetree_mstrees, ClusterMethod, DistanceMethod, cluster_on_minhash_signature
 
 router = APIRouter()
 
@@ -61,7 +61,9 @@ async def cluster_samples(
                 detail=str(error),
             )
         # sanity check that all samples had the desired typing result in the database
-        newick_tree: str = cluster_on_allele_profile(
-            profiles, clusterInput.method, clusterInput.distance
-        )
+        newick_tree: str = cluster_on_allele_profile_grapetree_mstrees(profiles)
+        # sanity check that all samples had the desired typing result in the database
+        # newick_tree: str = cluster_on_allele_profile(
+        #     profiles, clusterInput.method, clusterInput.distance
+        # )
     return newick_tree

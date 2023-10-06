@@ -1,15 +1,26 @@
 """Function for clustering."""
+import csv
+import os
+import subprocess
+import tempfile
+from enum import Enum
+
+import pandas as pd
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import pdist
-from ..crud.sample import TypingProfileOutput
-from enum import Enum
-import pandas as pd
-from skbio.tree import nj
 from skbio import DistanceMatrix
 import sourmash
 from app import config
 from pathlib import Path
 from typing import List
+
+from skbio.tree import nj
+
+from ..crud.sample import TypingProfileOutput
+
+import logging
+
+LOG = logging.getLogger(__name__)
 
 
 class DistanceMethod(Enum):
@@ -51,8 +62,8 @@ def cluster_on_allele_profile(
 ) -> str:
     """Cluster samples on allele profiles."""
     obs = pd.DataFrame(
-        [sample.allele_profile() for sample in profiles], 
-        index=[sample.sample_id for sample in profiles]
+        [sample.allele_profile() for sample in profiles],
+        index=[sample.sample_id for sample in profiles],
     )
     leaf_names = list(obs.index)
     # calcualte distance matrix
@@ -103,4 +114,72 @@ def cluster_on_minhash_signature(sample_ids: List[str], method: ClusterMethod):
     # creae newick tree
     labeltext = [str(item).replace(".fasta", "") for item in siglist]
     newick_tree = to_newick(tree, "", tree.dist, labeltext)
+    return newick_tree
+
+  
+  def cluster_on_allele_profile_grapetree_mstrees(profiles: TypingProfileOutput) -> str:
+    """
+    Cluster samples on their cgmlst profile using grapetree MStreesV2.
+
+    Returns:
+     - newick tree (str)
+
+    Profiles are recoded to grapetree input format and sent away as a TSV to
+    the grapetree binary
+    """
+
+    processed_profiles: list[dict] = []
+    tsv_header = set()
+
+    for sample in profiles:
+        processed_profile: dict = sample.allele_profile(strip_errors=True)
+
+        # Recode missing vals to "-"
+        processed_profile = {
+            key: "-" if value is None else value
+            for key, value in processed_profile.items()
+        }
+
+        tsv_header.update(processed_profile.keys())
+
+        # First char in header needs to be a '#'
+        processed_profile["#sample"] = sample.sample_id
+        processed_profiles.append(processed_profile)
+
+    with tempfile.NamedTemporaryFile("w", delete=True) as tmp_alleles_tsv:
+        tsv_header = sorted(list(tsv_header))
+        tsv_header.insert(0, "#sample")
+        writer = csv.DictWriter(
+            tmp_alleles_tsv, tsv_header, restval="-", delimiter="\t"
+        )
+        LOG.debug(f"Writing {len(processed_profiles)} profiles to {tmp_alleles_tsv.name}")
+        writer.writeheader()
+        writer.writerows(processed_profiles)
+        tmp_alleles_tsv.flush()
+
+        grapetree_cmd = [
+            "grapetree",
+            "-p",
+            os.path.basename(tmp_alleles_tsv.name),
+            "-m",
+            "MSTreeV2",
+        ]
+
+        LOG.debug(f"Executing os cmd: {' '.join(grapetree_cmd)}")
+
+        # working directory needs to be writeable as grapetree created tmp
+        # files when generating the tree, hence cwd=/tmp
+        with subprocess.Popen(
+            grapetree_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,  # ignore grapetree warnings/stderr.
+            cwd="/tmp",
+        ) as grapetree_output:
+            try:
+                stdout, _ = grapetree_output.communicate(timeout=15)
+            except TimeoutExpired:
+                proc.kill()
+
+    newick_tree = stdout.decode("utf-8").rstrip()
+    LOG.debug(f"Returning newick tree: %s", newick_tree)
     return newick_tree
