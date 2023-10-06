@@ -159,7 +159,7 @@ def get_samples_by_id(headers, **kwargs):
     # conduct query
     url = f'{current_app.config["BONSAI_API_URL"]}/samples'
     parmas = dict(
-        sample_ids=kwargs.get("sample_ids", None),
+        sid=kwargs.get("sample_ids", None),
         limit=kwargs.get("limit", 20),
         skip=kwargs.get("skip", 0),
     )
@@ -211,6 +211,24 @@ def remove_comment_from_sample(headers, **kwargs):
     # conduct query
     url = f'{current_app.config["BONSAI_API_URL"]}/samples/{sample_id}/comment/{comment_id}'
     resp = requests.delete(url, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@api_authentication
+def update_sample_qc_classification(headers, **kwargs):
+    """Update the qc classificaiton of a sample"""
+    if not 'sample_id' in kwargs:
+        raise ValueError('Sample id is required for this entrypoint')
+    sample_id = kwargs['sample_id']
+    data = {
+        "status": kwargs.get("status"),
+        "action": kwargs.get("action"),
+        "comment": kwargs.get("comment"),
+    }
+    # conduct query
+    url = f'{current_app.config["BONSAI_API_URL"]}/samples/{sample_id}/qc_status'
+    resp = requests.put(url, headers=headers, json=data)
     resp.raise_for_status()
     return resp.json()
 
