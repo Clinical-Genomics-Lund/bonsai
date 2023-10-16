@@ -18,15 +18,17 @@
         <h5 class="card-title text-uppercase fw-light">Groups</h5>
         <hr class="mt-2 col-md-2 border border-success border-2">
         {% if groups %}
-        <div class="d-flex justify-content-start">
-            <div class="row">
-                {% for group in groups %}
-                    <div class="col-sm-6 col-md-4 col-lg-auto py-2">
-                        {{ group_card(group, current_user.is_admin) }}
-                    </div>
-                {% endfor %}
+            <div class="d-flex justify-content-start">
+                <div class="row">
+                    {% for group in groups %}
+                        <div class="col-sm-6 col-md-4 col-lg-auto py-2">
+                            {{ group_card(group, current_user.is_admin) }}
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
+        {% else %}
+            <p class="card-text fw-light fst-italic">No sample groups.</p>
         {% endif %}
         <h5 class="card-title text-uppercase fw-light pt-4">All samples</h5>
         <hr class="mt-2 col-md-2 border border-success border-2">
