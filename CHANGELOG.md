@@ -2,9 +2,14 @@
 
 ### Added
 
+- New upload script (`upload_sample.py`) that takes a upload config in YAML format as input
+
 ### Fixed
 
 ### Changed
+
+- API route POST /samples/ returns `sample_id`
+- Removed `upload_sample.sh`
 
 ## [v0.3.0]
 
