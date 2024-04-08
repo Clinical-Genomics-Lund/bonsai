@@ -2,6 +2,14 @@
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [v0.5.0]
+
+### Added
+
 - Display LIMS id in samples view
 
 ### Changed
